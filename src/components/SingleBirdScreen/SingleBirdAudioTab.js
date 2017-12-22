@@ -1,8 +1,7 @@
 import React, { Component } from 'react';
-import { View, ScrollView, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Text, TouchableOpacity, TouchableHighlight, ActivityIndicator } from 'react-native';
 
-import RNFS from 'react-native-fs';
-import Sound from 'react-native-sound';
+import { Audio } from 'expo';
 import MCIcon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 class SingleBirdAudioTab extends Component {
@@ -10,105 +9,110 @@ class SingleBirdAudioTab extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      loading: true,
-      playing: false,
-      audio: null
+      soundObject: null,
+      soundStatus: {},
+      soundDuration: '',
+      positionMillis: 0
     };
-    this.dest = `${RNFS.DocumentDirectoryPath}/audio.mp3`;
   }
 
-  createSound() {
-    const audio = new Sound(this.dest, '', (error) => {
-      if (error) {
-        this.setState({soundError: true});
-        return;
-      }
-      const duration = Math.round(audio.getDuration());
+  async setSoundDuration() {
+    this.setState({ soundStatus: await this.state.soundObject.getStatusAsync() });
 
-      this.setState({ audio, duration });
-    });
+
+    //
+    // this.setState((prevState) => ({
+    //   positionMillis: prevState.soundStatus.positionMillis
+    // }));
+    console.log(this.state.soundStatus);
+
   }
 
-  onPlayFinishedCallback() {
-    clearInterval(this.interval);
+  async loadNewPlaybackInstance() {
+    const soundObject = new Audio.Sound();
 
-    this.state.audio.stop().release();
+    try {
+      await soundObject.loadAsync({ uri: `http://guide.florafauna.by/${this.props.bird.audio}`});
+      this.setState({ soundObject, soundStatus: await soundObject.getStatusAsync() });
+    } catch (error) {
+      this.setState({ soundError: true });
+    }
 
-    this.createSound();
+    this.setPlaybackInstanceDuration();
+  }
 
-    this.setState({
-      playing: false,
-      duration: Math.round(this.state.audio.getDuration())
-    });
+  async onPressPlay() {
+    const { soundObject } = this.state;
+    const soundStatus = await soundObject.getStatusAsync();
+
+    if (soundStatus.isPlaying) {
+      await soundObject.pauseAsync();
+    } else {
+      await soundObject.playAsync();
+    }
+
+    this.setState({ soundStatus: await soundObject.getStatusAsync() });
+  }
+
+  async setPlaybackInstanceDuration() {
+    this.setState({ soundStatus: await this.state.soundObject.getStatusAsync() });
+
+    const soundDuration = 1000 * Math.round(this.state.soundStatus.durationMillis / 1000);
+    const date = new Date(soundDuration);
+    const soundMinutes = date.getUTCMinutes();
+    const soundSeconds = (date.getUTCSeconds() < 10) ? `0${date.getUTCSeconds()}` : date.getUTCSeconds();
+
+    this.setState({ soundDuration: soundMinutes + ':' + soundSeconds });
   }
 
   componentDidMount() {
-    Sound.setCategory('Playback');
+    this.loadNewPlaybackInstance();
 
-    const job = RNFS.downloadFile({
-      fromUrl: `http://guide.florafauna.by/${this.props.bird.audio}`,
-      toFile: this.dest
-    });
-
-    job.promise.then(downLoadResult => {
-      if (downLoadResult.statusCode === 200) {
-        this.setState({
-          loading: false
-        });
-        this.createSound();
-      }
-    })
-  }
-
-  onPressPlay = () => {
-    const { audio, playing } = this.state;
-
-    if (!playing) {
-      audio.play(this.onPlayFinishedCallback.bind(this));
-
-      this.interval = setInterval(() => {
-        const { duration } = this.state;
-
-        this.setState({
-          duration: duration - 1
-        })
-      }, 1000);
-    } else {
-      clearInterval(this.interval);
-      audio.pause();
-    }
-
-    this.setState({
-      playing: !playing
-    });
+    // this.timerID = setInterval(() => {
+    //   this.setSoundDuration();
+    // }, 1000);
   }
 
   componentWillUnmount() {
-    this.interval && clearInterval(this.interval);
-    this.state.audio && this.state.audio.stop();
-    this.state.audio && this.state.audio.release();
+    const { soundObject } = this.state;
+
+    soundObject.stopAsync();
+
+    // clearInterval(this.timerID);
   }
 
   render() {
     const voice = this.props.bird.voice;
-
-    // capitalize voice description
     const voiceLetters = voice.split('');
 
     voiceLetters[0] = voiceLetters[0].toUpperCase();
 
     return (
-        <ScrollView style={{ height: 300 }}>
+        <ScrollView style={{ backgroundColor: '#313131' }}>
           <View>
             <Text style={styles.title}>{ voiceLetters.join('') }</Text>
           </View>
-          <View style={styles.playButtonWrapper}>
-            { !this.state.loading && this.state.audio ? (
-              <TouchableOpacity onPress={() => this.onPressPlay()} style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }}>
-                <MCIcon name={this.state.playing ? 'pause-circle' : 'play-circle'} style={{ color: '#1d1d1d' }} size={48}  />
-                <Text style={styles.seconds}>{ this.state.duration } сек</Text>
-              </TouchableOpacity>
-            ) : <ActivityIndicator/> }
+          <View style={styles.playerWrap}>
+            <View style={styles.playButtonWrapper}>
+              { this.state.soundObject ? (
+                <TouchableHighlight underlayColor='transparent' onPress={() => this.onPressPlay()} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <MCIcon name={this.state.soundStatus.isPlaying ? 'pause' : 'play'} style={{ color: '#fff' }} size={40}  />
+                </TouchableHighlight>
+              ) : <ActivityIndicator/> }
+            </View>
+            <View style={styles.playContentWrapper}>
+              <View style={styles.playContentInfo}>
+                <Text style={{ color: '#fff', fontWeight: 'bold' }}>Запись 1</Text>
+                <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
+              </View>
+              <View style={styles.progressBarWrap}>
+                <View style={styles.progressBar}></View>
+                <View style={styles.progressBarTime}>
+                  <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
+                  <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
+                </View>
+              </View>
+            </View>
           </View>
         </ScrollView>
     )
@@ -117,15 +121,62 @@ class SingleBirdAudioTab extends Component {
 
 const styles = {
   title: {
-    marginTop: 10,
-    marginLeft: 10,
-    color: '#1d1c1c',
+    marginTop: 21,
+    marginBottom: 21,
+    marginLeft: 16,
+    color: '#fff',
+  },
+  playerWrap: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    height: 74,
+    marginBottom: 20,
+    paddingLeft: 16,
+    paddingRight: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#464646',
+    borderBottomWidth: 1,
+    borderBottomColor: '#464646'
+  },
+  text: {
+    color: '#fff'
   },
   playButtonWrapper: {
     flexDirection: 'row',
     justifyContent: 'center',
+    width: 48,
+    height: 48,
+    marginRight: 24,
+    backgroundColor: '#464646',
+    borderRadius: 50
+  },
+  playContentWrapper: {
+    flexDirection: 'column',
+    height: 74,
+    width: '80%',
+    marginRight: 16
+  },
+  playContentInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    height: 60
+    width: '100%',
+    height: '50%'
+  },
+  progressBarWrap: {
+    flexDirection: 'column',
+    alignItems: 'space-between'
+  },
+  progressBar: {
+    flexDirection: 'row',
+    height: 4,
+    width: '100%',
+    backgroundColor: '#fff'
+  },
+  progressBarTime: {
+    flexDirection: 'row',
+    justifyContent: 'space-between'
   },
   seconds: {
     marginLeft: 10

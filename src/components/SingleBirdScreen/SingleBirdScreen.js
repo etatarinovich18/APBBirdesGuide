@@ -4,7 +4,7 @@ import { View, Text } from "react-native";
 import SingleBirdImageSlider from './SingleBirdImageSlider';
 import SingleBirdTitle from "./SingleBirdTitle";
 import SingleBirdTabs from "./SingleBirdTabs";
-// import SingleBirdAudioTab from "./SingleBirdAudioTab";
+import SingleBirdAudioTab from "./SingleBirdAudioTab";
 import SingleBirdDescriptionTab from "./SingleBirdDescriptionTab";
 import SingleBirdFeaturesTab from "./SingleBirdFeaturesTab";
 
@@ -33,8 +33,8 @@ class SingleBirdScreen extends Component {
       {
         name: 'audio',
         text: 'Голос',
-        // component: SingleBirdAudioTab
-        component: SingleBirdFeaturesTab
+        component: SingleBirdAudioTab
+        // component: SingleBirdFeaturesTab
       },
       {
         name: 'description',
