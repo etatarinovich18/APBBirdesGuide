@@ -12,23 +12,38 @@ class SingleBirdAudioTab extends Component {
       soundObject: null,
       soundStatus: {},
       soundDuration: '',
-      positionMillis: 0
+      soundPosition: '0:00',
+      soundPositionMillis: 0
     };
   }
 
-  async setSoundDuration() {
-    this.setState({ soundStatus: await this.state.soundObject.getStatusAsync() });
+  async setSoundPosition() {
+    const { soundObject } = this.state;
+    const roundDurationMillis = 1000 * Math.round(this.state.soundStatus.durationMillis / 1000);
 
+    let soundPosition = '0:00';
 
-    //
-    // this.setState((prevState) => ({
-    //   positionMillis: prevState.soundStatus.positionMillis
-    // }));
-    console.log(this.state.soundStatus);
+    if (roundDurationMillis === this.state.soundPositionMillis) {
+      await soundObject.pauseAsync();
 
+      clearInterval(this.timerID);
+    }
+
+    soundPosition = this.translateMillisToMinutesWithSeconds(this.state.soundPositionMillis);
+
+    this.state.soundPositionMillis += 1000;
+    console.log(soundPosition);
+    this.setState({ soundPosition });
   }
 
-  async loadNewPlaybackInstance() {
+  async setSoundDuration() {
+    const soundStatus = await this.state.soundObject.getStatusAsync();
+    const soundDuration = this.translateMillisToMinutesWithSeconds(soundStatus.durationMillis);
+
+    this.setState({ soundStatus, soundDuration });
+  }
+
+  async loadNewSound() {
     const soundObject = new Audio.Sound();
 
     try {
@@ -38,7 +53,7 @@ class SingleBirdAudioTab extends Component {
       this.setState({ soundError: true });
     }
 
-    this.setPlaybackInstanceDuration();
+    this.setSoundDuration();
   }
 
   async onPressPlay() {
@@ -47,30 +62,30 @@ class SingleBirdAudioTab extends Component {
 
     if (soundStatus.isPlaying) {
       await soundObject.pauseAsync();
+
+      clearInterval(this.timerID);
     } else {
       await soundObject.playAsync();
+
+      this.timerID = setInterval(async () => {
+        await this.setSoundPosition();
+      }, 1000);
     }
 
     this.setState({ soundStatus: await soundObject.getStatusAsync() });
   }
 
-  async setPlaybackInstanceDuration() {
-    this.setState({ soundStatus: await this.state.soundObject.getStatusAsync() });
-
-    const soundDuration = 1000 * Math.round(this.state.soundStatus.durationMillis / 1000);
-    const date = new Date(soundDuration);
+  translateMillisToMinutesWithSeconds(millis) {
+    const millisRound = 1000 * Math.round(millis / 1000);
+    const date = new Date(millisRound);
     const soundMinutes = date.getUTCMinutes();
     const soundSeconds = (date.getUTCSeconds() < 10) ? `0${date.getUTCSeconds()}` : date.getUTCSeconds();
 
-    this.setState({ soundDuration: soundMinutes + ':' + soundSeconds });
+    return soundMinutes + ':' + soundSeconds;
   }
 
   componentDidMount() {
-    this.loadNewPlaybackInstance();
-
-    // this.timerID = setInterval(() => {
-    //   this.setSoundDuration();
-    // }, 1000);
+    this.loadNewSound();
   }
 
   componentWillUnmount() {
@@ -78,7 +93,7 @@ class SingleBirdAudioTab extends Component {
 
     soundObject.stopAsync();
 
-    // clearInterval(this.timerID);
+    clearInterval(this.timerID);
   }
 
   render() {
@@ -106,10 +121,12 @@ class SingleBirdAudioTab extends Component {
                 <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
               </View>
               <View style={styles.progressBarWrap}>
-                <View style={styles.progressBar}></View>
+                <View style={styles.progressBar}>
+                   <View style={styles.downloadedProgressBar}></View>
+                </View>
                 <View style={styles.progressBarTime}>
-                  <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
-                  <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
+                  <Text style={{ color: '#fff' }}>{ this.state.soundPosition }</Text>
+                  <Text style={{ color: '#fff' }}>{ this.state.soundDuration }</Text>
                 </View>
               </View>
             </View>
@@ -130,7 +147,7 @@ const styles = {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    height: 74,
+    height: 78,
     marginBottom: 20,
     paddingLeft: 16,
     paddingRight: 10,
@@ -153,33 +170,34 @@ const styles = {
   },
   playContentWrapper: {
     flexDirection: 'column',
-    height: 74,
+    height: 78,
     width: '80%',
-    marginRight: 16
+    marginRight: 16,
+    paddingTop: 8,
+    paddingBottom: 8
   },
   playContentInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     width: '100%',
-    height: '50%'
+    height: '60%'
   },
   progressBarWrap: {
     flexDirection: 'column',
-    alignItems: 'space-between'
+    height: '40%'
   },
   progressBar: {
     flexDirection: 'row',
     height: 4,
     width: '100%',
+    marginBottom: 2,
     backgroundColor: '#fff'
   },
   progressBarTime: {
     flexDirection: 'row',
-    justifyContent: 'space-between'
-  },
-  seconds: {
-    marginLeft: 10
+    justifyContent: 'space-between',
+    width: '100%'
   }
 };
 
