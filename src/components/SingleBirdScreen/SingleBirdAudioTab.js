@@ -8,52 +8,91 @@ class SingleBirdAudioTab extends Component {
 
   constructor(props) {
     super(props);
+    this.soundTimerMillis = 0;
     this.state = {
       soundObject: null,
       soundStatus: {},
       soundDuration: '',
-      soundPosition: '0:00',
-      soundPositionMillis: 0
+      soundDurationMillis: 0,
+      soundTimer: '',
+      soundTimeLeft: '',
+      downloadedProgressBarWidth: 0
     };
   }
 
-  async setSoundPosition() {
+  async setSoundTimer() {
+    this.soundTimerMillis += 1000;
+
     const { soundObject } = this.state;
-    const roundDurationMillis = 1000 * Math.round(this.state.soundStatus.durationMillis / 1000);
 
-    let soundPosition = '0:00';
+    let soundTimer = this.translateMillisToMinutesWithSeconds(this.soundTimerMillis);
 
-    if (roundDurationMillis === this.state.soundPositionMillis) {
-      await soundObject.pauseAsync();
+    if (this.soundTimerMillis >= this.state.soundDurationMillis) {
+      this.soundTimerMillis = 0;
 
+      await soundObject.playAsync();
+      await soundObject.stopAsync();
       clearInterval(this.timerID);
+      this.setSoundInitialState();
+
+      return;
     }
 
-    soundPosition = this.translateMillisToMinutesWithSeconds(this.state.soundPositionMillis);
-
-    this.state.soundPositionMillis += 1000;
-    console.log(soundPosition);
-    this.setState({ soundPosition });
+    console.log(1);
+    this.setState({
+      soundTimer
+    });
   }
 
-  async setSoundDuration() {
+  async setSoundTimeLeft() {
+    let soundTimeLeftMillis = this.state.soundDurationMillis - this.soundTimerMillis;
+    let soundTimeLeft = `-${this.translateMillisToMinutesWithSeconds(soundTimeLeftMillis)}`;
+
+    this.setState({
+      soundTimeLeft
+    });
+  }
+
+  async setDownloadedProgressBarWidth() {
+    let downloadedProgressBarWidth = (this.soundTimerMillis * 100) / this.state.soundDurationMillis;
+    console.log(downloadedProgressBarWidth);
+    this.setState({
+      downloadedProgressBarWidth
+    });
+  }
+
+  async setSoundInitialState() {
     const soundStatus = await this.state.soundObject.getStatusAsync();
+    const soundDurationMillis = 1000 * Math.round(soundStatus.durationMillis / 1000);
     const soundDuration = this.translateMillisToMinutesWithSeconds(soundStatus.durationMillis);
 
-    this.setState({ soundStatus, soundDuration });
+    this.setState({
+      soundStatus,
+      soundDuration,
+      soundDurationMillis,
+      soundTimer: '0:00',
+      soundTimeLeft: `-${soundDuration}`,
+      progressBarWidth: 0,
+      downloadedProgressBarWidth: 0
+    });
   }
 
   async loadNewSound() {
     const soundObject = new Audio.Sound();
 
     try {
-      await soundObject.loadAsync({ uri: `http://guide.florafauna.by/${this.props.bird.audio}`});
-      this.setState({ soundObject, soundStatus: await soundObject.getStatusAsync() });
+      await soundObject.loadAsync({ uri: `http://guide.florafauna.by/${this.props.bird.audio}` });
+      this.setState({
+        soundObject,
+        soundStatus: await soundObject.getStatusAsync()
+      });
     } catch (error) {
-      this.setState({ soundError: true });
+      this.setState({
+        soundError: true
+      });
     }
 
-    this.setSoundDuration();
+    this.setSoundInitialState();
   }
 
   async onPressPlay() {
@@ -68,11 +107,15 @@ class SingleBirdAudioTab extends Component {
       await soundObject.playAsync();
 
       this.timerID = setInterval(async () => {
-        await this.setSoundPosition();
+        await this.setSoundTimer();
+        await this.setSoundTimeLeft();
+        await this.setDownloadedProgressBarWidth();
       }, 1000);
     }
 
-    this.setState({ soundStatus: await soundObject.getStatusAsync() });
+    this.setState({
+      soundStatus: await soundObject.getStatusAsync()
+    });
   }
 
   translateMillisToMinutesWithSeconds(millis) {
@@ -82,6 +125,28 @@ class SingleBirdAudioTab extends Component {
     const soundSeconds = (date.getUTCSeconds() < 10) ? `0${date.getUTCSeconds()}` : date.getUTCSeconds();
 
     return soundMinutes + ':' + soundSeconds;
+  }
+
+  onPressProgressBar(event) {
+    const { soundObject } = this.state;
+    const progressBarWidth = this.state.progressBarWidth;
+    let location = event.nativeEvent.locationX;
+    let newSoundPositionMillis = 1000 * Math.round(((this.state.soundDurationMillis / progressBarWidth) * location) / 1000);
+    let soundTimer = this.translateMillisToMinutesWithSeconds(newSoundPositionMillis);
+    this.soundTimerMillis = newSoundPositionMillis;
+    console.log(soundTimer);
+    soundObject.setPositionAsync(newSoundPositionMillis);
+    this.setDownloadedProgressBarWidth();
+    this.setSoundTimeLeft();
+    this.setState({
+      soundTimer
+    });
+  }
+
+  setProgressBarWidth(event) {
+    this.setState({
+      progressBarWidth: event.nativeEvent.layout.width
+    });
   }
 
   componentDidMount() {
@@ -121,12 +186,14 @@ class SingleBirdAudioTab extends Component {
                 <Text style={{ color: '#8f8e94' }}>{ this.state.soundDuration }</Text>
               </View>
               <View style={styles.progressBarWrap}>
-                <View style={styles.progressBar}>
-                   <View style={styles.downloadedProgressBar}></View>
+                <View onLayout={(event) => this.setProgressBarWidth(event)} style={styles.progressBar}>
+                  <TouchableHighlight underlayColor='transparent' onPress={(event) => this.onPressProgressBar(event)} style={{ width: '100%', height: '100%' }}>
+                    <View style={{ position: 'absolute', height: 5, backgroundColor: '#c2a855', width: `${this.state.downloadedProgressBarWidth}%` }}></View>
+                  </TouchableHighlight>
                 </View>
                 <View style={styles.progressBarTime}>
-                  <Text style={{ color: '#fff' }}>{ this.state.soundPosition }</Text>
-                  <Text style={{ color: '#fff' }}>{ this.state.soundDuration }</Text>
+                  <Text style={{ color: '#fff' }}>{ this.state.soundTimer }</Text>
+                  <Text style={{ color: '#fff' }}>{ this.state.soundTimeLeft }</Text>
                 </View>
               </View>
             </View>
@@ -193,6 +260,12 @@ const styles = {
     width: '100%',
     marginBottom: 2,
     backgroundColor: '#fff'
+  },
+  downloadedProgressBar: {
+    position: 'absolute',
+    height: 5,
+    width: 5,
+    backgroundColor: '#464646'
   },
   progressBarTime: {
     flexDirection: 'row',
